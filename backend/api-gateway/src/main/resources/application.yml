@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+grpc:
+  client:
+    identity-service:
+      address: ${GRPC_CLIENT_IDENTITY_SERVICE_ADDRESS:static://localhost:9093}
+      negotiation-type: plaintext
+    shop-catalog-service:
+      address: ${GRPC_CLIENT_CATALOG_SERVICE_ADDRESS:static://localhost:9091}
+      negotiation-type: plaintext
+    order-payment-service:
+      address: ${GRPC_CLIENT_ORDER_SERVICE_ADDRESS:static://localhost:9092}
+      negotiation-type: plaintext
+
+spring:
+  application:
+    name: api-gateway
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+shopi:
+  jwt:
+    secret: ${JWT_SECRET:ShopiSuperSecureEnterpriseKey2026MustBeAtLeast256BitsLong}
+  rate-limit:
+    capacity: 100
+    refill-tokens-per-second: 20
+  upload:
+    dir: ${SHOPI_UPLOAD_DIR:/app/uploads}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always

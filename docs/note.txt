@@ -1,0 +1,8 @@
+1. thêm git ignore
+2. thêm bảng quản trị của seller cho phép cấu hình các trường cần thiết để kết nối với sepay nhận dữ liệu và xử lý hóa đơn qua webhook, có thể cấu hình trạng thái test để ko cần thanh toán thực tế vẫn mua hàng được
+4. tôi cần lưu cấu hình chuyển khoản, để hướng dẫn người mua chuyển khoản theo thông tin trên từng hóa đơn
+5. thêm seed data để có thể test ngay, luôn cài đặt sẵn account admin
+6. logic tại vị trí mua hàng khi bấm mua thì lập tức trừ hàng tồn kho ngay ko lock, sau khi người mua cancel hoặc giao dịch thất bại thì trả hàng lại trạng thái và số lượng ban đầu
+7. lưu trữ ảnh upload lên ở đâu trong dự án này?
+8. thêm chức năng nhắn tin với seller, sellet có giao diện trả lời các tin nhắn của khách hàng, có thể gửi tin nhắn hình ảnh
+9. đăng nhập bằng google, các key cần thiết tôi sẽ điền vào sau

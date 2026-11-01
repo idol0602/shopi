@@ -1,0 +1,337 @@
+name: Shopi Enterprise Production CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deployment action to execute'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - redeploy
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ==========================================
+  # JOB 1: Backend Automated Testing Suite
+  # ==========================================
+  test:
+    name: "Backend Test: ${{ matrix.service }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - backend/api-gateway
+          - backend/identity-service
+          - backend/shop-catalog-service
+          - backend/order-payment-service
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+          cache-dependency-path: '${{ matrix.service }}/pom.xml'
+
+      - name: Run Backend Unit & Integration Tests
+        working-directory: ${{ matrix.service }}
+        run: |
+          mvn clean test --batch-mode
+
+  # ==========================================
+  # JOB 2: Frontend Lint & Typecheck Build
+  # ==========================================
+  test-frontend:
+    name: Frontend Lint & Build Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run TypeScript Build Verification
+        working-directory: frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_ENV: production
+        run: npm run build
+
+  # ==========================================
+  # JOB 3: Multi-Architecture Docker Builds
+  # ==========================================
+  build:
+    name: "Build & Push: ${{ matrix.name }}"
+    needs: [test, test-frontend]
+    runs-on: ubuntu-latest
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api-gateway
+            context: ./backend/api-gateway
+            image: ghcr.io/${{ github.repository }}/api-gateway
+          - name: identity-service
+            context: ./backend/identity-service
+            image: ghcr.io/${{ github.repository }}/identity-service
+          - name: shop-catalog-service
+            context: ./backend/shop-catalog-service
+            image: ghcr.io/${{ github.repository }}/shop-catalog-service
+          - name: order-payment-service
+            context: ./backend/order-payment-service
+            image: ghcr.io/${{ github.repository }}/order-payment-service
+          - name: frontend
+            context: ./frontend
+            image: ghcr.io/${{ github.repository }}/frontend
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for Multi-Arch Build
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+
+      - name: Build and Push Multi-Arch Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ==========================================
+  # JOB 4: Zero-Downtime Deployment via SSH
+  # ==========================================
+  deploy:
+    name: Zero-Downtime Rolling Deployment
+    needs: build
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy')
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH Private Key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Docker Compose & Configurations to Target VPS
+        env:
+          TARGET_HOST: ${{ secrets.VPS_HOST }}
+          TARGET_USER: ${{ secrets.VPS_USER }}
+          TARGET_DIR: /opt/shopi
+        run: |
+          ssh -o StrictHostKeyChecking=no ${TARGET_USER}@${TARGET_HOST} "mkdir -p ${TARGET_DIR}/docker/nginx/conf.d ${TARGET_DIR}/docker/prometheus ${TARGET_DIR}/docker/grafana"
+          scp -r docker-compose.yml ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/
+          scp -r docker/nginx/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/nginx/
+          scp -r docker/prometheus/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/prometheus/
+          scp -r docker/grafana/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/grafana/
+
+      - name: Execute Remote Rolling Update & Health Verification
+        env:
+          TARGET_HOST: ${{ secrets.VPS_HOST }}
+          TARGET_USER: ${{ secrets.VPS_USER }}
+          TARGET_DIR: /opt/shopi
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          LOWER_IMAGE_PREFIX="ghcr.io/$(echo "${REPO_NAME}" | tr '[:upper:]' '[:lower:]')"
+          ssh -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+            "TARGET_DIR='${TARGET_DIR}' REGISTRY_USER='${REGISTRY_USER}' REGISTRY_PASSWORD='${REGISTRY_PASSWORD}' IMAGE_PREFIX='${LOWER_IMAGE_PREFIX}' bash -se" << 'EOF'
+            cd "${TARGET_DIR}"
+            export IMAGE_PREFIX
+
+            echo "=== Logging in to GitHub Container Registry ==="
+            echo "${REGISTRY_PASSWORD}" | docker login ghcr.io -u "${REGISTRY_USER}" --password-stdin
+
+            echo "=== Pulling latest production container images ==="
+            docker compose pull
+
+            echo "=== Executing zero-downtime rolling update ==="
+            docker compose up -d --remove-orphans
+
+            echo "=== Reloading NGINX configuration gracefully ==="
+            docker compose exec -T nginx nginx -s reload 2>/dev/null || true
+
+            echo "=== Verifying deployment health with polling retry loop ==="
+            MAX_RETRIES=24
+            RETRY_INTERVAL=5
+            SUCCESS=false
+
+            for i in $(seq 1 $MAX_RETRIES); do
+              HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/health || true)
+              echo "Health check attempt $i/$MAX_RETRIES: HTTP $HEALTH_STATUS"
+              if [ "$HEALTH_STATUS" = "200" ]; then
+                SUCCESS=true
+                break
+              fi
+              sleep $RETRY_INTERVAL
+            done
+
+            if [ "$SUCCESS" != "true" ]; then
+              echo "Deployment verification failed after $((MAX_RETRIES * RETRY_INTERVAL))s!"
+              docker compose ps
+              exit 1
+            fi
+
+            echo "Deployment successfully verified: HTTP 200 OK"
+          EOF
+
+  # ==========================================
+  # JOB 5: Full Redeploy (Manual Trigger Only)
+  # ==========================================
+  redeploy:
+    name: Full Redeploy (Clean Rebuild, Keep Volumes)
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'redeploy'
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH Private Key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Sync Docker Compose & Configurations to Target VPS
+        env:
+          TARGET_HOST: ${{ secrets.VPS_HOST }}
+          TARGET_USER: ${{ secrets.VPS_USER }}
+          TARGET_DIR: /opt/shopi
+        run: |
+          ssh -o StrictHostKeyChecking=no ${TARGET_USER}@${TARGET_HOST} "mkdir -p ${TARGET_DIR}/docker/nginx/conf.d ${TARGET_DIR}/docker/prometheus ${TARGET_DIR}/docker/grafana"
+          scp -r docker-compose.yml ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/
+          scp -r docker/nginx/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/nginx/
+          scp -r docker/prometheus/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/prometheus/
+          scp -r docker/grafana/* ${TARGET_USER}@${TARGET_HOST}:${TARGET_DIR}/docker/grafana/
+
+      - name: Execute Full Redeploy (Clean Rebuild, Keep Volumes)
+        env:
+          TARGET_HOST: ${{ secrets.VPS_HOST }}
+          TARGET_USER: ${{ secrets.VPS_USER }}
+          TARGET_DIR: /opt/shopi
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          LOWER_IMAGE_PREFIX="ghcr.io/$(echo "${REPO_NAME}" | tr '[:upper:]' '[:lower:]')"
+          ssh -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+            "TARGET_DIR='${TARGET_DIR}' REGISTRY_USER='${REGISTRY_USER}' REGISTRY_PASSWORD='${REGISTRY_PASSWORD}' IMAGE_PREFIX='${LOWER_IMAGE_PREFIX}' bash -se" << 'EOF'
+            cd "${TARGET_DIR}"
+            export IMAGE_PREFIX
+
+            echo "=== STEP 0: Logging in to GitHub Container Registry ==="
+            echo "${REGISTRY_PASSWORD}" | docker login ghcr.io -u "${REGISTRY_USER}" --password-stdin
+
+            echo "=== STEP 1: Stop all running containers (KEEPING ALL VOLUMES INTACT) ==="
+            # STRICTLY NO '-v' flag is used, preserving all named volumes:
+            # - postgres_identity_data, postgres_catalog_data, postgres_order_data
+            # - redis_data, pgadmin_data, prometheus_data, grafana_data
+            docker compose down
+
+            echo "=== STEP 2: Remove old project container images and clean build cache ==="
+            docker compose config --images | xargs -r docker rmi -f 2>/dev/null || true
+            docker image prune -f
+            docker builder prune -f
+
+            echo "=== STEP 3: Pull fresh images from GHCR ==="
+            docker compose pull
+
+            echo "=== STEP 4: Start all services freshly attaching preserved volumes ==="
+            docker compose up -d
+
+            echo "=== STEP 5: Verify redeployment health with polling retry loop ==="
+            MAX_RETRIES=30
+            RETRY_INTERVAL=5
+            SUCCESS=false
+
+            for i in $(seq 1 $MAX_RETRIES); do
+              HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/health || true)
+              echo "Health check attempt $i/$MAX_RETRIES: HTTP $HEALTH_STATUS"
+              if [ "$HEALTH_STATUS" = "200" ]; then
+                SUCCESS=true
+                break
+              fi
+              sleep $RETRY_INTERVAL
+            done
+
+            if [ "$SUCCESS" != "true" ]; then
+              echo "Redeploy verification failed after $((MAX_RETRIES * RETRY_INTERVAL))s!"
+              docker compose ps
+              exit 1
+            fi
+
+            echo "Redeploy successfully verified: HTTP 200 OK"
+          EOF

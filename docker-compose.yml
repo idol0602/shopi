@@ -1,0 +1,369 @@
+services:
+  # ============================================================================
+  # TIER 1: DATA & CACHE LAYER (Foundational State Stores)
+  # ============================================================================
+
+  postgres-identity-db:
+    image: postgres:16-alpine
+    container_name: shopi-postgres-identity-db
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_DB=shopi_identity_db
+      - POSTGRES_USER=shopi_identity_user
+      - POSTGRES_PASSWORD=identity_secret_pass
+    volumes:
+      - postgres_identity_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopi_identity_user -d shopi_identity_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shopi-net
+
+  postgres-catalog-db:
+    image: postgres:16-alpine
+    container_name: shopi-postgres-catalog-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=shopi_catalog_db
+      - POSTGRES_USER=shopi_catalog_user
+      - POSTGRES_PASSWORD=catalog_secret_pass
+    volumes:
+      - postgres_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopi_catalog_user -d shopi_catalog_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shopi-net
+
+  postgres-order-db:
+    image: postgres:16-alpine
+    container_name: shopi-postgres-order-db
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=shopi_order_db
+      - POSTGRES_USER=shopi_order_user
+      - POSTGRES_PASSWORD=order_secret_pass
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopi_order_user -d shopi_order_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shopi-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: shopi-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", ""]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    networks:
+      - shopi-net
+
+  # ============================================================================
+  # TIER 2: gRPC MICROSERVICES MESH (Domain Services)
+  # ============================================================================
+
+  identity-service:
+    build:
+      context: ./backend/identity-service
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/identity-service:latest
+    container_name: shopi-identity-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083" # HTTP Actuator & Health
+      - "9093:9093" # Internal gRPC Port
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8083
+      - GRPC_SERVER_PORT=9093
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m -XX:+UseG1GC
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-identity-db:5432/shopi_identity_db
+      - SPRING_DATASOURCE_USERNAME=shopi_identity_user
+      - SPRING_DATASOURCE_PASSWORD=identity_secret_pass
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres-identity-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  shop-catalog-service:
+    build:
+      context: ./backend/shop-catalog-service
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/shop-catalog-service:latest
+    container_name: shopi-catalog-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081" # HTTP Actuator & Health
+      - "9091:9091" # Internal gRPC Port
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8081
+      - GRPC_SERVER_PORT=9091
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m -XX:+UseG1GC
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-catalog-db:5432/shopi_catalog_db
+      - SPRING_DATASOURCE_USERNAME=shopi_catalog_user
+      - SPRING_DATASOURCE_PASSWORD=catalog_secret_pass
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres-catalog-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  order-payment-service:
+    build:
+      context: ./backend/order-payment-service
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/order-payment-service:latest
+    container_name: shopi-order-payment-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082" # HTTP Actuator & Health
+      - "9092:9092" # Internal gRPC Port
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8082
+      - GRPC_SERVER_PORT=9092
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m -XX:+UseG1GC
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-order-db:5432/shopi_order_db
+      - SPRING_DATASOURCE_USERNAME=shopi_order_user
+      - SPRING_DATASOURCE_PASSWORD=order_secret_pass
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - GRPC_CLIENT_SHOP_CATALOG_SERVICE_ADDRESS=static://shop-catalog-service:9091
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8082/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres-order-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      shop-catalog-service:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  # ============================================================================
+  # TIER 3: EDGE API GATEWAY (REST-to-gRPC Translator & Security Layer)
+  # ============================================================================
+
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/api-gateway:latest
+    container_name: shopi-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8080
+      - JAVA_TOOL_OPTIONS=-Xms128m -Xmx256m -XX:+UseG1GC
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - GRPC_CLIENT_IDENTITY_SERVICE_ADDRESS=static://identity-service:9093
+      - GRPC_CLIENT_CATALOG_SERVICE_ADDRESS=static://shop-catalog-service:9091
+      - GRPC_CLIENT_ORDER_SERVICE_ADDRESS=static://order-payment-service:9092
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+      identity-service:
+        condition: service_healthy
+      shop-catalog-service:
+        condition: service_healthy
+      order-payment-service:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  # ============================================================================
+  # TIER 4: INGRESS, FRONTEND & OBSERVABILITY TOOLING
+  # ============================================================================
+
+  nextjs-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/frontend:latest
+    container_name: shopi-nextjs-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8080
+      - PORT=3000
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: shopi-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+      nextjs-frontend:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: shopi-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: shopi-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=ShopiGrafanaAdminPass2026!
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - shopi-net
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: shopi-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8085:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: shopi-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@shopi.vn
+      - PGADMIN_DEFAULT_PASSWORD=AdminShopiSecurePass2026!
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres-identity-db:
+        condition: service_healthy
+      postgres-catalog-db:
+        condition: service_healthy
+      postgres-order-db:
+        condition: service_healthy
+    networks:
+      - shopi-net
+
+# ============================================================================
+# NETWORKS & VOLUMES
+# ============================================================================
+networks:
+  shopi-net:
+    driver: bridge
+
+volumes:
+  postgres_identity_data:
+  postgres_catalog_data:
+  postgres_order_data:
+  redis_data:
+  pgadmin_data:
+  prometheus_data:
+  grafana_data:

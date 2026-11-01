@@ -1,0 +1,425 @@
+syntax = "proto3";
+
+package shopi.marketplace.v1;
+
+option java_multiple_files = true;
+option java_package = "com.shopi.marketplace.v1";
+option java_outer_classname = "MarketplaceProto";
+
+// ==========================================
+// Enums
+// ==========================================
+
+enum ProductStatus {
+  PRODUCT_STATUS_UNSPECIFIED = 0;
+  AVAILABLE = 1;
+  RESERVED = 2;
+  SOLD = 3;
+  HIDDEN = 4;
+  OUT_OF_STOCK = 5;
+}
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  PENDING_PAYMENT = 1;
+  PROOF_UPLOADED = 2;
+  CONFIRMED = 3;
+  SHIPPED = 4;
+  CANCELLED = 5;
+  PAYMENT_FAILED = 6;
+}
+
+// ==========================================
+// Data Models
+// ==========================================
+
+message Product {
+  string id = 1;
+  string title = 2;
+  string slug = 3;
+  string description = 4;
+  int64 price_amount = 5; // Amount in VND
+  string currency = 6;     // e.g. "VND"
+  string category = 7;
+  repeated string image_urls = 8;
+  ProductStatus status = 9;
+  string seller_id = 10;
+  string reserved_by_user_id = 11;
+  int64 created_at = 12;   // Epoch timestamp in milliseconds
+  int64 updated_at = 13;
+  int32 quantity = 14;
+}
+
+message Order {
+  string id = 1;
+  string product_id = 2;
+  string buyer_id = 3;
+  string seller_id = 4;
+  int64 total_amount = 5;
+  string currency = 6;
+  OrderStatus status = 7;
+  string viet_qr_payload = 8;
+  string receipt_image_url = 9;
+  int64 payment_deadline_epoch_ms = 10;
+  int64 created_at = 11;
+  int64 updated_at = 12;
+  string bank_name = 13;
+  string bank_account_number = 14;
+  string bank_account_holder = 15;
+  string transaction_reference = 16;
+}
+
+message SellerPaymentConfig {
+  string id = 1;
+  string seller_id = 2;
+  string bank_name = 3;
+  string account_number = 4;
+  string account_holder = 5;
+  string sepay_api_key = 6;
+  string sepay_webhook_token = 7;
+  bool test_mode = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+message Conversation {
+  string id = 1;
+  string buyer_id = 2;
+  string seller_id = 3;
+  string product_id = 4;
+  int64 created_at = 5;
+  int64 updated_at = 6;
+  string last_message_content = 7;
+  int64 last_message_at = 8;
+  int32 unread_count = 9;
+  string product_title = 10;
+  string product_image_url = 11;
+  int64 product_price = 12;
+}
+
+message ChatMessage {
+  string id = 1;
+  string conversation_id = 2;
+  string sender_id = 3;
+  string content = 4;
+  string image_url = 5;
+  bool is_read = 6;
+  int64 created_at = 7;
+}
+
+// ==========================================
+// Catalog Service Requests & Responses
+// ==========================================
+
+message ProductQueryRequest {
+  string product_id = 1;
+  string slug = 2;
+}
+
+message ListProductsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string category = 3;
+  ProductStatus status_filter = 4;
+  string search_query = 5;
+}
+
+message ProductListResponse {
+  repeated Product products = 1;
+  int32 total_count = 2;
+  int32 current_page = 3;
+  int32 total_pages = 4;
+}
+
+message CreateProductRequest {
+  string title = 1;
+  string description = 2;
+  int64 price_amount = 3;
+  string currency = 4;
+  string category = 5;
+  repeated string image_urls = 6;
+  string seller_id = 7;
+  int32 quantity = 8;
+}
+
+message ProductResponse {
+  Product product = 1;
+}
+
+message ReserveProductRequest {
+  string product_id = 1;
+  string buyer_id = 2;
+  string order_id = 3;
+}
+
+message ReserveProductResponse {
+  bool success = 1;
+  string message = 2;
+  Product product = 3;
+}
+
+message ReleaseProductRequest {
+  string product_id = 1;
+  string order_id = 2;
+  string reason = 3;
+}
+
+message ReleaseProductResponse {
+  bool success = 1;
+  string message = 2;
+  Product product = 3;
+}
+
+message MarkProductSoldRequest {
+  string product_id = 1;
+  string buyer_id = 2;
+  string order_id = 3;
+}
+
+// ==========================================
+// Order Service Requests & Responses
+// ==========================================
+
+message CreateOrderRequest {
+  string product_id = 1;
+  string buyer_id = 2;
+}
+
+message SubmitPaymentReceiptRequest {
+  string order_id = 1;
+  string buyer_id = 2;
+  string receipt_image_url = 3;
+}
+
+message ConfirmOrderRequest {
+  string order_id = 1;
+  string seller_id = 2;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+  string reason = 3;
+}
+
+message OrderResponse {
+  Order order = 1;
+  string message = 2;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+}
+
+message ListOrdersRequest {
+  string user_id = 1;
+  string role = 2; // "SELLER", "BUYER", "ADMIN"
+  int32 page = 3;
+  int32 page_size = 4;
+  string status_filter = 5;
+}
+
+message OrderListResponse {
+  repeated Order orders = 1;
+  int32 total_count = 2;
+  int32 current_page = 3;
+  int32 total_pages = 4;
+}
+
+message GetSellerPaymentConfigRequest {
+  string seller_id = 1;
+}
+
+message SaveSellerPaymentConfigRequest {
+  string seller_id = 1;
+  string bank_name = 2;
+  string account_number = 3;
+  string account_holder = 4;
+  string sepay_api_key = 5;
+  string sepay_webhook_token = 6;
+  bool test_mode = 7;
+}
+
+message SellerPaymentConfigResponse {
+  SellerPaymentConfig config = 1;
+  string message = 2;
+}
+
+message ProcessSepayWebhookRequest {
+  string gateway = 1;
+  string transaction_date = 2;
+  string account_number = 3;
+  string code = 4;
+  string content = 5;
+  string transfer_type = 6;
+  int64 transfer_amount = 7;
+  string reference_code = 8;
+  string sub_account = 9;
+  string seller_id = 10;
+}
+
+message SimulatePaymentRequest {
+  string order_id = 1;
+  string user_id = 2;
+}
+
+// ==========================================
+// Chat Service Requests & Responses
+// ==========================================
+
+message GetConversationsRequest {
+  string user_id = 1;
+}
+
+message ConversationListResponse {
+  repeated Conversation conversations = 1;
+}
+
+message GetOrCreateConversationRequest {
+  string buyer_id = 1;
+  string product_id = 2;
+}
+
+message ConversationResponse {
+  Conversation conversation = 1;
+}
+
+message GetMessagesRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+}
+
+message MessageListResponse {
+  repeated ChatMessage messages = 1;
+}
+
+message SendMessageRequest {
+  string conversation_id = 1;
+  string sender_id = 2;
+  string content = 3;
+  string image_url = 4;
+}
+
+message MessageResponse {
+  ChatMessage message = 1;
+}
+
+// ==========================================
+// Auth Service (Token Lifecycle & Login)
+// ==========================================
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+  string token_type = 4;
+  string user_id = 5;
+  string email = 6;
+  string role = 7;
+  string full_name = 8;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message TokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+  string token_type = 4;
+}
+
+message RevokeTokenRequest {
+  string refresh_token = 1;
+  string access_token = 2;
+}
+
+message RevokeTokenResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Registration Flow Messages
+message SendOtpRequest {
+  string email = 1;
+}
+
+message SendOtpResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message VerifyOtpRequest {
+  string email = 1;
+  string otp_code = 2;
+}
+
+message VerifyOtpResponse {
+  bool success = 1;
+  string message = 2;
+  string verification_token = 3;
+}
+
+message RegisterWithEmailRequest {
+  string email = 1;
+  string password = 2;
+  string full_name = 3;
+  string verification_token = 4;
+}
+
+message LoginWithGoogleRequest {
+  string id_token = 1;
+  string email = 2;
+  string full_name = 3;
+  string avatar_url = 4;
+}
+
+// ==========================================
+// Service Definitions
+// ==========================================
+
+service CatalogService {
+  rpc GetProduct (ProductQueryRequest) returns (ProductResponse);
+  rpc ListProducts (ListProductsRequest) returns (ProductListResponse);
+  rpc CreateProduct (CreateProductRequest) returns (ProductResponse);
+  rpc ReserveProduct (ReserveProductRequest) returns (ReserveProductResponse);
+  rpc ReleaseProduct (ReleaseProductRequest) returns (ReleaseProductResponse);
+  rpc MarkProductSold (MarkProductSoldRequest) returns (ProductResponse);
+}
+
+service OrderService {
+  rpc CreateOrder (CreateOrderRequest) returns (OrderResponse);
+  rpc GetOrder (GetOrderRequest) returns (OrderResponse);
+  rpc ListOrders (ListOrdersRequest) returns (OrderListResponse);
+  rpc SubmitPaymentReceipt (SubmitPaymentReceiptRequest) returns (OrderResponse);
+  rpc ConfirmOrder (ConfirmOrderRequest) returns (OrderResponse);
+  rpc CancelOrder (CancelOrderRequest) returns (OrderResponse);
+  rpc GetSellerPaymentConfig (GetSellerPaymentConfigRequest) returns (SellerPaymentConfigResponse);
+  rpc SaveSellerPaymentConfig (SaveSellerPaymentConfigRequest) returns (SellerPaymentConfigResponse);
+  rpc ProcessSepayWebhook (ProcessSepayWebhookRequest) returns (OrderResponse);
+  rpc SimulatePayment (SimulatePaymentRequest) returns (OrderResponse);
+}
+
+service ChatService {
+  rpc GetConversations (GetConversationsRequest) returns (ConversationListResponse);
+  rpc GetOrCreateConversation (GetOrCreateConversationRequest) returns (ConversationResponse);
+  rpc GetMessages (GetMessagesRequest) returns (MessageListResponse);
+  rpc SendMessage (SendMessageRequest) returns (MessageResponse);
+}
+
+service AuthService {
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (TokenResponse);
+  rpc RevokeToken (RevokeTokenRequest) returns (RevokeTokenResponse);
+  rpc SendOtp (SendOtpRequest) returns (SendOtpResponse);
+  rpc VerifyOtp (VerifyOtpRequest) returns (VerifyOtpResponse);
+  rpc RegisterWithEmail (RegisterWithEmailRequest) returns (LoginResponse);
+  rpc LoginWithGoogle (LoginWithGoogleRequest) returns (LoginResponse);
+}

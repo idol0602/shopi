@@ -1,0 +1,27 @@
+{
+  "name": "shopi-marketplace",
+  "version": "1.0.0",
+  "description": "Shopi - High-Performance C2C Used-Goods Marketplace with Inventory Reservation Saga and SePay Escrow",
+  "private": true,
+  "scripts": {
+    "docker:build": "docker compose build",
+    "docker:up": "powershell -ExecutionPolicy Bypass -File ./scripts/start-ordered.ps1",
+    "docker:up:sh": "bash ./scripts/start-ordered.sh",
+    "docker:down": "docker compose down",
+    "docker:ps": "docker compose ps",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:lint": "npm --prefix frontend run lint"
+  },
+  "keywords": [
+    "c2c",
+    "marketplace",
+    "nextjs",
+    "spring-boot",
+    "grpc",
+    "vietqr",
+    "sepay"
+  ],
+  "author": "Shopi Engineering Team",
+  "license": "UNLICENSED"
+}

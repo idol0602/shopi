@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;      /* #09090b - zinc-950 */
+    --foreground: 0 0% 98%;          /* #fafafa - zinc-50 */
+
+    --surface: 240 10% 4.9%;         /* #0c0c0e */
+    --surface-subtle: 240 5.9% 10%;  /* #18181b - zinc-900 */
+    --surface-elevated: 240 3.7% 15.9%; /* #27272a - zinc-800 */
+
+    --primary: 0 0% 98%;             /* #fafafa */
+    --primary-foreground: 240 5.9% 10%;
+
+    --muted: 240 3.7% 15.9%;         /* zinc-800 */
+    --muted-foreground: 240 5% 64.9%;/* zinc-400 */
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;        /* zinc-800 #27272a */
+    --ring: 240 4.9% 83.9%;          /* zinc-300 */
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-zinc-800 selection:text-zinc-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background-color: #09090b;
+    color: #f4f4f5;
+  }
+}
+
+/* Linear-style subtle gradient glow backgrounds */
+.radial-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(120, 119, 198, 0.08), transparent 70%);
+}
+
+.card-shine {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.005) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.card-shine:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
