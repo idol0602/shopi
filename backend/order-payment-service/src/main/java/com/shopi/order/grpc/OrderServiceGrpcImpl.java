@@ -131,12 +131,12 @@ public class OrderServiceGrpcImpl extends OrderServiceGrpc.OrderServiceImplBase 
             // Set 15-minute expiration countdown key in Redis for saga timeout tracking
             try {
                 redisTemplate.opsForValue().set(
-                        REDIS_ORDER_TIMEOUT_PREFIX + orderId,
+                        REDIS_ORDER_TIMEOUT_PREFIX + savedOrder.getId().toString(),
                         request.getProductId(),
                         Duration.ofMinutes(15)
                 );
             } catch (Exception redisEx) {
-                log.warn("Redis reservation cache failure for order {}: {}", orderId, redisEx.getMessage());
+                log.warn("Redis reservation cache failure for order {}: {}", savedOrder.getId(), redisEx.getMessage());
             }
 
             OrderResponse response = OrderResponse.newBuilder()

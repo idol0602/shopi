@@ -59,6 +59,10 @@ public class OrderServiceGrpcIntegrationTest {
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("spring.redis.host", redis::getHost);
+        registry.add("spring.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("SPRING_DATA_REDIS_HOST", redis::getHost);
+        registry.add("SPRING_DATA_REDIS_PORT", () -> String.valueOf(redis.getMappedPort(6379)));
         registry.add("grpc.client.shop-catalog-service.address", () -> "in-process:test");
     }
 
@@ -79,6 +83,9 @@ public class OrderServiceGrpcIntegrationTest {
         MockitoAnnotations.openMocks(this);
         ReflectionTestUtils.setField(orderServiceGrpc, "catalogServiceStub", catalogServiceStub);
         orderRepository.deleteAll();
+        try {
+            redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
+        } catch (Exception ignored) {}
     }
 
     /**
@@ -93,7 +100,7 @@ public class OrderServiceGrpcIntegrationTest {
         // Arrange
         String productId = "prod-macbook-pro-16-m1-max";
         String buyerId = "buyer-alice-01";
-        String sellerId = "seller-bob-99";
+        String sellerId = "b0000000-0000-0000-0000-000000000099";
         long price = 43500000L;
 
         when(catalogServiceStub.reserveProduct(any(ReserveProductRequest.class))).thenAnswer(invocation -> {

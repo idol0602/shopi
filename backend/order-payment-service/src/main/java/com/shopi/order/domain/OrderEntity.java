@@ -21,7 +21,6 @@ import java.util.UUID;
 public class OrderEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -75,6 +74,9 @@ public class OrderEntity {
 
     @PrePersist
     protected void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         long now = System.currentTimeMillis();
         if (createdAt == null) {
             createdAt = now;

@@ -87,6 +87,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponseDto> handleResponseStatusException(org.springframework.web.server.ResponseStatusException ex, HttpServletRequest request) {
+        log.warn("ResponseStatusException for URI {}: status={}, message={}",
+                request.getRequestURI(), ex.getStatusCode(), ex.getReason());
+
+        ErrorResponseDto errorResponse = ErrorResponseDto.builder()
+                .timestamp(Instant.now().toString())
+                .status(ex.getStatusCode().value())
+                .error(ex.getStatusCode().toString())
+                .message(ex.getReason() != null ? ex.getReason() : ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(ex.getStatusCode()).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDto> handleGenericException(Exception ex, HttpServletRequest request) {
         log.error("Unhandled exception for URI {}: {}", request.getRequestURI(), ex.getMessage(), ex);

@@ -56,6 +56,10 @@ public class AuthSecurityIntegrationTest {
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.data.redis.host", redis::getHost);
         registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("spring.redis.host", redis::getHost);
+        registry.add("spring.redis.port", () -> redis.getMappedPort(6379));
+        registry.add("SPRING_DATA_REDIS_HOST", redis::getHost);
+        registry.add("SPRING_DATA_REDIS_PORT", () -> String.valueOf(redis.getMappedPort(6379)));
         registry.add("grpc.client.order-payment-service.address", () -> "in-process:test");
         registry.add("grpc.client.shop-catalog-service.address", () -> "in-process:test");
         registry.add("grpc.client.identity-service.address", () -> "in-process:test");
@@ -79,6 +83,12 @@ public class AuthSecurityIntegrationTest {
     @Mock
     private AuthServiceGrpc.AuthServiceBlockingStub authServiceStub;
 
+    @Mock
+    private OrderServiceGrpc.OrderServiceBlockingStub orderServiceStub;
+
+    @Mock
+    private CatalogServiceGrpc.CatalogServiceBlockingStub catalogServiceStub;
+
     @Value("${shopi.jwt.secret:shopi-enterprise-jwt-secret-key-must-be-at-least-256-bits-long-shopi-2026}")
     private String jwtSecret;
 
@@ -86,6 +96,8 @@ public class AuthSecurityIntegrationTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         ReflectionTestUtils.setField(apiGatewayController, "authServiceStub", authServiceStub);
+        ReflectionTestUtils.setField(apiGatewayController, "orderServiceStub", orderServiceStub);
+        ReflectionTestUtils.setField(apiGatewayController, "catalogServiceStub", catalogServiceStub);
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
     }
 
