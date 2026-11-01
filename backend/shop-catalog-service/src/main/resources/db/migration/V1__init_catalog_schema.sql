@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS products (
 
 CREATE TABLE IF NOT EXISTS product_images (
     product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-    image_url VARCHAR(500) NOT NULL
+    image_url VARCHAR(500) NOT NULL,
+    PRIMARY KEY (product_id, image_url)
 );
 
 CREATE INDEX IF NOT EXISTS idx_products_slug ON products(slug);
@@ -101,4 +102,4 @@ VALUES
     ('33333333-3333-3333-3333-333333333333', 'https://images.unsplash.com/photo-1580481077195-c328a37db729?w=800&q=80'),
     ('44444444-4444-4444-4444-444444444444', 'https://images.unsplash.com/photo-1510557880182-3d4d3cba35a5?w=800&q=80'),
     ('55555555-5555-5555-5555-555555555555', 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (product_id, image_url) DO NOTHING;

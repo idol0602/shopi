@@ -224,7 +224,7 @@ jobs:
             docker compose exec -T nginx nginx -s reload 2>/dev/null || true
 
             echo "=== Verifying deployment health with polling retry loop ==="
-            MAX_RETRIES=24
+            MAX_RETRIES=30
             RETRY_INTERVAL=5
             SUCCESS=false
 
