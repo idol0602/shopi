@@ -88,7 +88,7 @@ services:
     build:
       context: ./backend/identity-service
       dockerfile: Dockerfile
-    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/identity-service:latest
+    image: ${IMAGE_PREFIX:-ghcr.io/idol0602/shopi}/identity-service:latest
     container_name: shopi-identity-service
     restart: unless-stopped
     ports:
@@ -105,7 +105,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8083/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8083/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -122,7 +122,7 @@ services:
     build:
       context: ./backend/shop-catalog-service
       dockerfile: Dockerfile
-    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/shop-catalog-service:latest
+    image: ${IMAGE_PREFIX:-ghcr.io/idol0602/shopi}/shop-catalog-service:latest
     container_name: shopi-catalog-service
     restart: unless-stopped
     ports:
@@ -139,7 +139,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8081/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -156,7 +156,7 @@ services:
     build:
       context: ./backend/order-payment-service
       dockerfile: Dockerfile
-    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/order-payment-service:latest
+    image: ${IMAGE_PREFIX:-ghcr.io/idol0602/shopi}/order-payment-service:latest
     container_name: shopi-order-payment-service
     restart: unless-stopped
     ports:
@@ -174,7 +174,7 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
       - GRPC_CLIENT_SHOP_CATALOG_SERVICE_ADDRESS=static://shop-catalog-service:9091
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8082/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8082/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -197,7 +197,7 @@ services:
     build:
       context: ./backend/api-gateway
       dockerfile: Dockerfile
-    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/api-gateway:latest
+    image: ${IMAGE_PREFIX:-ghcr.io/idol0602/shopi}/api-gateway:latest
     container_name: shopi-api-gateway
     restart: unless-stopped
     ports:
@@ -214,7 +214,7 @@ services:
       - GRPC_CLIENT_CATALOG_SERVICE_ADDRESS=static://shop-catalog-service:9091
       - GRPC_CLIENT_ORDER_SERVICE_ADDRESS=static://order-payment-service:9092
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -239,7 +239,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: ${IMAGE_PREFIX:-ghcr.io/shopi}/frontend:latest
+    image: ${IMAGE_PREFIX:-ghcr.io/idol0602/shopi}/frontend:latest
     container_name: shopi-nextjs-frontend
     restart: unless-stopped
     ports:
@@ -250,7 +250,7 @@ services:
       - NEXT_PUBLIC_API_GATEWAY_URL=
       - PORT=3000
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 8
@@ -272,7 +272,7 @@ services:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:80/health || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 3
